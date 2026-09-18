@@ -75,7 +75,6 @@ allocproc(void)
 {
   struct proc *p;
   char *sp;
-
   acquire(&ptable.lock);
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
@@ -89,6 +88,9 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
 
+  p->ticks = ticks;
+  p->priority = 5;
+  p->runtime = 0;
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -114,6 +116,82 @@ found:
 
   return p;
 }
+
+struct proc* find_process(int pid){
+	
+	struct proc *p;
+	acquire(&ptable.lock);
+	for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+		if(p->state != UNUSED && p->pid == pid){
+			
+			release(&ptable.lock);
+			return p;
+		}
+	}
+	release(&ptable.lock);
+	return 0;
+
+	
+
+}
+
+int
+setnice(int pid, int value)
+{
+	struct proc *p;
+	if(value < 0 || value > 10) return -1;
+
+	p = find_process(pid);
+	if(!p) return -1;
+	p->priority = value;
+	return 0;
+}
+
+int
+getnice(int pid)
+{
+	struct proc *p;
+	p = find_process(pid);
+       if(!p) return -1;
+	return p->priority;
+
+}
+
+int
+ps(void)
+{
+  struct proc *p;
+  // 프로세스 상태 문자열 정의 (proc.h의 enum procstate와 매핑)
+  static char *states[] = {
+  [UNUSED]   "UNUSED  ",
+  [EMBRYO]   "EMBRYO  ",
+  [SLEEPING] "SLEEPING",
+  [RUNNABLE] "RUNNABLE",
+  [RUNNING]  "RUNNING ",
+  [ZOMBIE]   "ZOMBIE  "
+  };
+  char *state_str;
+
+  cprintf("NAME\tPID\tSTATE\t\tPRIORITY\tRUNTIME\tTICK\n");
+
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->state == UNUSED)
+      continue;
+
+    if(p->state >= 0 && p->state < NELEM(states) && states[p->state])
+      state_str = states[p->state];
+    else
+      state_str = "???     ";
+
+    cprintf("%s\t%d\t%s\t%d\t\t%d\t%d\n",
+            p->name, p->pid, state_str, p->priority, p->runtime, p->ticks);
+  }
+  release(&ptable.lock);
+
+  return 0;
+}	
+
 
 //PAGEBREAK: 32
 // Set up first user process.
@@ -183,12 +261,14 @@ fork(void)
   int i, pid;
   struct proc *np;
   struct proc *curproc = myproc();
+  
+  
 
   // Allocate process.
   if((np = allocproc()) == 0){
     return -1;
   }
-
+  np -> priority = curproc->priority;
   // Copy process state from proc.
   if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
     kfree(np->kstack);

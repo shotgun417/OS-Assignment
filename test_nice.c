@@ -1,4 +1,9 @@
-void test_nice()
+#include "types.h"
+#include "stat.h"
+#include "user.h"
+
+
+void test_nice()	
 {
 	int pid, nice;
 
@@ -50,4 +55,5 @@ void test_nice()
 	}
 	else			//parent
 		wait();
+	exit();
 }

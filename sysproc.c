@@ -43,6 +43,33 @@ sys_getpid(void)
 }
 
 int
+sys_getnice(void){
+	int pid;
+	if(argint(0, &pid) < 0)
+		return -1;
+	return getnice(pid);
+
+}
+
+int
+sys_setnice(void){
+
+ int pid, value;
+ if(argint(0, &pid) < 0 || argint(1, &value) < 0)
+	 return -1;
+ return setnice(pid,value);
+
+
+
+}
+
+int
+sys_ps(void){
+	return ps();
+
+}
+
+int
 sys_sbrk(void)
 {
   int addr;
