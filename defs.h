@@ -123,7 +123,8 @@ void            yield(void);
 int             getnice(int);
 int             setnice(int, int);
 int             ps(void);
-
+void		yield(void);
+void		update_ticks(void);
 // swtch.S
 void            swtch(struct context**, struct context*);
 

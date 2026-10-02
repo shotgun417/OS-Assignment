@@ -184,6 +184,9 @@ UPROGS=\
 	_ps\
 	_test_nice\
 	_loop\
+	_test_sched1\
+	_test_sched2\
+	_test_sched3\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)

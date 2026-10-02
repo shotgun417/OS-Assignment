@@ -87,7 +87,7 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
-
+  
   p->ticks = ticks;
   p->priority = 5;
   p->runtime = 0;
@@ -135,18 +135,38 @@ struct proc* find_process(int pid){
 
 }
 
-int
+
+
+
+  int
 setnice(int pid, int value)
 {
-	struct proc *p;
-	if(value < 0 || value > 10) return -1;
+  struct proc *p;
+  int found = 0;
 
-	p = find_process(pid);
-	if(!p) return -1;
-	p->priority = value;
-	return 0;
+  if(value < 0 || value > 10)
+    return -1;
+
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->pid == pid){
+      p->priority = value;
+      found = 1;
+      break;
+    }
+  }
+  release(&ptable.lock);
+
+  if(!found)
+    return -1;
+
+  // 자기 자신의 priority를 바꾼 경우 즉시 재스케줄링 기회 부여
+  if(myproc() && myproc()->pid == pid){
+    yield();
+  }
+
+  return 0;
 }
-
 int
 getnice(int pid)
 {
@@ -204,6 +224,9 @@ userinit(void)
   p = allocproc();
   
   initproc = p;
+
+  p -> priority = 5;
+  p -> ticks = 0;
   if((p->pgdir = setupkvm()) == 0)
     panic("userinit: out of memory?");
   inituvm(p->pgdir, _binary_initcode_start, (int)_binary_initcode_size);
@@ -279,8 +302,6 @@ fork(void)
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
-
-  // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
 
   for(i = 0; i < NOFILE; i++)
@@ -293,9 +314,9 @@ fork(void)
   pid = np->pid;
 
   acquire(&ptable.lock);
-
   np->state = RUNNABLE;
-
+  np->priority = 5;     
+  np->ticks = 0;     
   release(&ptable.lock);
 
   return pid;
@@ -407,34 +428,75 @@ scheduler(void)
   c->proc = 0;
   
   for(;;){
-    // Enable interrupts on this processor.
     sti();
 
-    // Loop over process table looking for process to run.
     acquire(&ptable.lock);
+
+    struct proc *best_p = 0;
+    int min_eff_priority = 999999;
+    int max_ticks = -1;
+
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
 
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
+      // effective_priority = priority - (ticks / 100)
+      int eff_priority = p->priority - (p->ticks /AGING_INTERVAL);
 
-      swtch(&(c->scheduler), p->context);
+      if(eff_priority < 0) eff_priority = 0;
+      if(eff_priority < min_eff_priority){
+        min_eff_priority = eff_priority;
+        max_ticks = p->ticks;
+        best_p = p;
+      } 
+      
+      else if(eff_priority == min_eff_priority){
+        if(p->ticks > max_ticks){
+          max_ticks = p->ticks;
+          best_p = p;
+        }
+      
+        else if(p->ticks == max_ticks){
+          if(best_p && p->pid < best_p->pid){
+            best_p = p;
+          }
+        }
+      }
+    }
+
+    if(best_p != 0){
+      c->proc = best_p;
+      switchuvm(best_p);
+      best_p->state = RUNNING;
+      best_p -> ticks = 0;
+
+      swtch(&(c->scheduler), best_p->context);
       switchkvm();
 
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
       c->proc = 0;
     }
-    release(&ptable.lock);
 
+    release(&ptable.lock);
   }
 }
+void
+update_ticks(void)
+{
+  struct proc *p;
 
+  int holding_lock = holding(&ptable.lock);
+  if(!holding_lock)
+    acquire(&ptable.lock);
+
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->state == RUNNABLE){
+      p->ticks++;
+    }
+  }
+
+  if(!holding_lock)
+    release(&ptable.lock);
+}
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state. Saves and restores
 // intena because intena is a property of this
@@ -467,7 +529,7 @@ yield(void)
 {
   acquire(&ptable.lock);  //DOC: yieldlock
   myproc()->state = RUNNABLE;
-  sched();
+   sched();
   release(&ptable.lock);
 }
 
