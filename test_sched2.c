@@ -12,7 +12,7 @@ int main(int argc, char **argv)
 
   // 현재 프로세스의 우선순위 변경 (주석 처리된 경우 기본 동작 확인)
   // setnice(getpid(), 2);
-
+setnice(getpid(), 9);
   // 자식 프로세스 생성
   pid = fork();
 

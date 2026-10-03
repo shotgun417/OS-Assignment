@@ -11,7 +11,7 @@ int main(int argc, char **argv)
   setnice(1, 10);
 
   // 현재 프로세스의 우선순위를 설정
-  setnice(getpid(), 9);
+  setnice(getpid(),2);
 
   // 자식 프로세스 생성
   pid = fork();

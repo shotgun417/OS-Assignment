@@ -66,6 +66,8 @@ trap(struct trapframe *tf)
 
    
 	lapiceoi();
+	if(myproc() && myproc()->state == RUNNING)
+    yield();
 	break;	
 	
   case T_IRQ0 + IRQ_IDE:
@@ -105,8 +107,7 @@ trap(struct trapframe *tf)
             tf->err, cpuid(), tf->eip, rcr2());
     myproc()->killed = 1;
   }
-  if(myproc() && myproc()->state == RUNNING && tf->trapno == T_IRQ0 + IRQ_TIMER)
-  yield();
+  
   // Force process exit if it has been killed and is in user space.
   // (If it is still executing in the kernel, let it keep running
   // until it gets to the regular system call return.)

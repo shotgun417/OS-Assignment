@@ -88,7 +88,7 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
   
-  p->ticks = ticks;
+  p->ticks = 0;
   p->priority = 5;
   p->runtime = 0;
   release(&ptable.lock);
@@ -150,7 +150,9 @@ setnice(int pid, int value)
   acquire(&ptable.lock);
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->pid == pid){
-      p->priority = value;
+      //cprintf("디버깅용: %d번 프로세스를 찾아 우선순위 값을 %d로 바꿨습니다.\n", pid,value);
+	   p->priority = value;
+	   p->ticks = 0;
       found = 1;
       break;
     }
@@ -160,10 +162,10 @@ setnice(int pid, int value)
   if(!found)
     return -1;
 
-  // 자기 자신의 priority를 바꾼 경우 즉시 재스케줄링 기회 부여
-  if(myproc() && myproc()->pid == pid){
-    yield();
-  }
+
+
+ //  yield();
+
 
   return 0;
 }
@@ -285,13 +287,13 @@ fork(void)
   struct proc *np;
   struct proc *curproc = myproc();
   
-  
+ 
 
   // Allocate process.
   if((np = allocproc()) == 0){
     return -1;
   }
-  np -> priority = curproc->priority;
+  
   // Copy process state from proc.
   if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
     kfree(np->kstack);
@@ -426,10 +428,9 @@ scheduler(void)
   struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
-  
+
   for(;;){
     sti();
-
     acquire(&ptable.lock);
 
     struct proc *best_p = 0;
@@ -440,26 +441,21 @@ scheduler(void)
       if(p->state != RUNNABLE)
         continue;
 
-      // effective_priority = priority - (ticks / 100)
-      int eff_priority = p->priority - (p->ticks /AGING_INTERVAL);
-
+      
+      int eff_priority = p->priority - (p->ticks / AGING_INTERVAL);
       if(eff_priority < 0) eff_priority = 0;
+
+      
       if(eff_priority < min_eff_priority){
         min_eff_priority = eff_priority;
         max_ticks = p->ticks;
         best_p = p;
-      } 
+      }
       
       else if(eff_priority == min_eff_priority){
         if(p->ticks > max_ticks){
           max_ticks = p->ticks;
           best_p = p;
-        }
-      
-        else if(p->ticks == max_ticks){
-          if(best_p && p->pid < best_p->pid){
-            best_p = p;
-          }
         }
       }
     }
@@ -468,7 +464,9 @@ scheduler(void)
       c->proc = best_p;
       switchuvm(best_p);
       best_p->state = RUNNING;
-      best_p -> ticks = 0;
+      
+      
+      best_p->ticks = 0; 
 
       swtch(&(c->scheduler), best_p->context);
       switchkvm();
